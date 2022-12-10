@@ -2,12 +2,14 @@
 
 This crate implements a PID controller as described in
 
+``` text
 Åström, K. J., & Hägglund, T. (1988).
 Automatic Tuning of PID Controllers.
 Instrument Society of America (ISA).
 ISBN 1-55617-081-5
+```
 
-**This is currently experimental and should not be used yet.**
+**This crate is currently experimental and should not be used yet.**
 
 ## TODO
 
