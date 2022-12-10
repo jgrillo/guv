@@ -2,7 +2,15 @@
 name = "guv"
 version = "0.1.0"
 authors = ["Jesse C. Grillo <jgrillo@protonmail.com>"]
+description = "A PID Controller"
+license = "Apache-2.0"
+repository = "https://github.com/jgrillo/guv"
+readme = "README.md"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+num-traits = "0.2"
+
+[dev-dependencies]
+proptest = "1.0"
