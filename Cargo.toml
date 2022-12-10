@@ -1,6 +1,6 @@
 [package]
 name = "guv"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jesse C. Grillo <jgrillo@protonmail.com>"]
 description = "A PID Controller"
 license = "Apache-2.0"
