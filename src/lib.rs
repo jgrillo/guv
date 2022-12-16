@@ -1,6 +1,21 @@
 //! This crate is experimental and should not be used.
 
-use std::time::{SystemTime, SystemTimeError};
+use std::{
+    fmt::Debug,
+    time::{SystemTime, SystemTimeError},
+};
+
+use thiserror::Error;
+
+#[derive(Clone, Debug, Error)]
+#[non_exhaustive]
+pub enum PidControllerError {
+    #[error("error computing elapsed time {0}")]
+    SystemTime(#[from] SystemTimeError),
+
+    #[error("numeric error {0}")]
+    Numeric(&'static str),
+}
 
 /// This implementation of a PID controller comes from
 ///
@@ -36,7 +51,7 @@ use std::time::{SystemTime, SystemTimeError};
 #[derive(Clone, Debug)]
 pub struct PidController<T>
 where
-    T: num_traits::real::Real,
+    T: num_traits::real::Real + Debug,
 {
     K: T,
     T_i: T,
@@ -49,39 +64,42 @@ where
     D_k1: T,
     r_k1: T,
     y_k1: T,
-    y_k2: T,
     t_k1: SystemTime,
 }
 
 #[allow(non_snake_case)]
 impl<T> PidController<T>
 where
-    T: num_traits::real::Real,
+    T: num_traits::real::Real + Debug,
 {
     /// Construct a new PidController.
     /// \
     /// # Arguments:
     /// \
     /// - `proportional_gain` -- The output the controller is multiplied by this
-    ///   factor
+    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
     /// \
     /// - `integral_time_constant` -- The time required for the integral term to
     ///   "catch up to" the proportional term in the face of an instantaneous
-    ///   jump in controller error
+    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `derivative_time_constant` -- The time required for the proportional
     ///   term to "catch up to" the derivative term if the error starts at zero
-    ///   and increases at a fixed rate
+    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `tracking_time_constant` -- The time required for the integral term to
-    ///   "reset". This is necessary to prevent integral wind-up.
+    ///   "reset". This is necessary to prevent integral wind-up. Must be
+    ///   in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `derivative_gain_limit` -- This term mitigates the effects of high
     ///   frequency noise in the derivative term by limiting the gain, which in
-    ///   turn limits the high frequency noise amplification factor.
+    ///   turn limits the high frequency noise amplification factor. Must be
+    ///   in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
+    ///
     /// - `set_point_coefficient` -- This term determines how the controller
-    ///   reacts to a change in the setpoint.
+    ///   reacts to a change in the setpoint. Must be in
+    ///   `[T::zero(), 1 / T::epsilon()]`.
     pub fn new(
         proportional_gain: T,
         integral_time_constant: T,
@@ -89,27 +107,67 @@ where
         tracking_time_constant: T,
         derivative_gain_limit: T,
         set_point_coefficient: T,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, PidControllerError> {
+        let zero = T::zero();
+        let eps = T::epsilon();
+        let n_max = T::one() / eps;
+
+        if proportional_gain < zero || proportional_gain > n_max {
+            return Err(PidControllerError::Numeric(
+                "proportional_gain must be in [T::zero(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if integral_time_constant < eps || integral_time_constant > n_max {
+            return Err(PidControllerError::Numeric(
+                "integral_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if derivative_time_constant < eps || derivative_time_constant > n_max {
+            return Err(PidControllerError::Numeric(
+                "derivative_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if tracking_time_constant < eps || tracking_time_constant > n_max {
+            return Err(PidControllerError::Numeric(
+                "tracking_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if derivative_gain_limit < eps || derivative_gain_limit > n_max {
+            return Err(PidControllerError::Numeric(
+                "derivative_gain_limit must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if set_point_coefficient < zero || set_point_coefficient > n_max {
+            return Err(PidControllerError::Numeric(
+                "set_point_coefficient must be in [T::zero(), 1 / T::epsilon()]",
+            ));
+        }
+
+        Ok(Self {
             K: proportional_gain,
             T_i: integral_time_constant,
             T_d: derivative_time_constant,
             T_t: tracking_time_constant,
             N: derivative_gain_limit,
             b: set_point_coefficient,
-            P_k1: T::zero(),
-            I_k1: T::zero(),
-            D_k1: T::zero(),
-            r_k1: T::zero(),
-            y_k1: T::zero(),
-            y_k2: T::zero(),
+            P_k1: zero,
+            I_k1: zero,
+            D_k1: zero,
+            r_k1: zero,
+            y_k1: zero,
             t_k1: SystemTime::now(),
-        }
+        })
     }
 
     /// Updates this controller's state according to the given
-    /// parameters. Returns the updated control output, or a `SystemTimeError`
-    /// if the `measurement_time` is in the future relative to the system clock.
+    /// parameters. Returns the updated control output, or a
+    /// `PidControllerError` if the `measurement_time` is in the future relative
+    /// to the system clock.
     /// \
     /// # Arguments:
     /// \
@@ -129,19 +187,20 @@ where
         measurement_time: SystemTime,
         lower_saturation_limit: T,
         upper_saturation_limit: T,
-    ) -> Result<T, SystemTimeError> {
+    ) -> Result<T, PidControllerError> {
         let h = calculate_h(measurement_time, self.last_update_time())?;
 
-        Ok(self.update_state(
+        self.update_state(
             h,
             set_point,
             process_measurement,
             lower_saturation_limit,
             upper_saturation_limit,
-        ))
+        )
     }
 
-    /// Returns the most recently computed control output
+    /// Returns the most recently computed control output. If `.update(..)` has
+    /// not been called yet this will return zero.
     pub fn control_output(&self) -> T {
         self.P_k1 + self.I_k1 + self.D_k1
     }
@@ -152,15 +211,17 @@ where
     }
 
     fn calculate_P(&self, r_k: T, y_k: T) -> T {
-        self.P_k1 + self.K * (self.b * r_k - y_k - self.b * self.r_k1 + self.y_k1)
+        self.K * (self.b * r_k - y_k)
     }
 
     fn calculate_I(&self, h: T, r_k: T, y_k: T, u: T, v: T) -> T {
         self.I_k1 + (self.K * h / self.T_i) * (r_k - y_k) + (h / self.T_t) * (u - v)
     }
 
-    fn calculate_D(&self, h: T, y_k: T) -> T {
-        let two = T::from(2.0).expect("2.0 must be representable by F");
+    fn calculate_D(&self, h: T, y_k: T) -> Result<T, PidControllerError> {
+        let two = T::from(2.0).ok_or(PidControllerError::Numeric(
+            "2.0 must be representable by T",
+        ))?;
 
         let (a_i, b_i) = if self.T_d < (self.N * h) / two {
             // use backward difference
@@ -176,14 +237,19 @@ where
             (a_i, b_i)
         };
 
-        self.D_k1 + (b_i / (T::one() - a_i)) * (y_k - two * self.y_k1 + self.y_k2)
+        Ok(a_i * self.D_k1 + b_i * (y_k - self.y_k1))
     }
 
-    fn update_state(&mut self, h: T, r_k: T, y_k: T, u_low: T, u_high: T) -> T {
+    fn update_state(
+        &mut self,
+        h: T,
+        r_k: T,
+        y_k: T,
+        u_low: T,
+        u_high: T,
+    ) -> Result<T, PidControllerError> {
         self.P_k1 = self.calculate_P(r_k, y_k);
-        assert!(!self.P_k1.to_f64().expect("some value").is_nan());
-        self.D_k1 = self.calculate_D(h, y_k);
-        assert!(!self.D_k1.to_f64().expect("some value").is_nan());
+        self.D_k1 = self.calculate_D(h, y_k)?;
 
         let v = self.control_output();
 
@@ -193,53 +259,135 @@ where
         let u = num_traits::clamp(v, u_low, u_high);
 
         self.I_k1 = self.calculate_I(h, r_k, y_k, u, v);
-        assert!(!self.I_k1.to_f64().expect("some value").is_nan());
 
         self.r_k1 = r_k;
-        self.y_k2 = self.y_k1;
         self.y_k1 = y_k;
 
-        self.control_output()
+        Ok(self.control_output())
     }
 }
 
 /// Compute the number of seconds that has elapsed between `last_update_time`
-/// and `measurement_time`. Returns a `SystemTimeError` if `last_update_time`
-/// occurred after `measurement_time`.
+/// and `measurement_time`. Returns a `PidControllerError` if `last_update_time`
+/// occurred after `measurement_time`, or if there is a problem representing a
+/// number as `T`.
 fn calculate_h<T>(
     measurement_time: SystemTime,
     last_update_time: SystemTime,
-) -> Result<T, SystemTimeError>
+) -> Result<T, PidControllerError>
 where
     T: num_traits::real::Real,
 {
     let duration = measurement_time.duration_since(last_update_time)?;
 
     Ok(
-        T::from(duration.as_secs()).expect("duration's seconds part must be representable as T")
-            + (T::from(duration.subsec_nanos())
-                .expect("duration's nanoseconds part must be representable as T")
-                / T::from(1_000_000_000).expect("1_000_000_000 must be representable as T")),
+        T::from(duration.as_secs()).ok_or(PidControllerError::Numeric(
+            "duration's seconds part must be representable as T",
+        ))? + (T::from(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
+            "duration's nanoseconds part must be representable as T",
+        ))? / T::from(1_000_000_000).ok_or(PidControllerError::Numeric(
+            "1_000_000_000 must be representable as T",
+        ))?),
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fmt::Debug,
+        time::{Duration, SystemTime},
+    };
+
     use proptest::prelude::*;
 
-    use super::PidController;
+    use crate::{PidController, PidControllerError};
 
-    fn pid_controllers<T>() -> impl Strategy<Value = PidController<T>>
+    use super::calculate_h;
+
+    //
+    // proptest strategies
+    //
+
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `(T::epsilon(), T::max_value()]`
+    fn positive_nonzero_numbers<T>() -> impl Strategy<Value = T>
     where
         T: num_traits::real::Real + Arbitrary,
     {
+        any::<T>().prop_map(|n| {
+            let eps = T::epsilon();
+            let n_abs = n.abs();
+
+            if n_abs <= eps {
+                n_abs + eps
+            } else {
+                n_abs
+            }
+        })
+    }
+
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `(T::epsilon(), 1 / T::epsilon()]`
+    fn epsilon_epsilon_inverse_bounded_numbers<T>() -> impl Strategy<Value = T>
+    where
+        T: num_traits::real::Real + Arbitrary,
+    {
+        positive_nonzero_numbers::<T>().prop_map(|n| {
+            let one = T::one();
+            let two = T::from(2.0).expect("2.0 must be representable by T");
+            let eps = T::epsilon();
+            let n_max = one / eps;
+
+            if n > n_max {
+                let val = n_max * ((n.sin() + one) / two);
+
+                if val > eps {
+                    val
+                } else {
+                    eps
+                }
+            } else {
+                n
+            }
+        })
+    }
+
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `[T::zero(), 1 / T::epsilon()]`
+    fn zero_epsilon_inverse_bounded_numbers<T>() -> impl Strategy<Value = T>
+    where
+        T: num_traits::real::Real + Arbitrary,
+    {
+        any::<T>().prop_map(|n| {
+            let one = T::one();
+            let two = T::from(2.0).expect("2.0 must be representable by T");
+            let n_max = one / T::epsilon();
+
+            n_max * ((n.sin() + one) / two)
+        })
+    }
+
+    /// This strategy generates `PidController<T>` structs whose configuration
+    /// parameters are themselves individually populated by the given argument
+    /// strategies.
+    fn pid_controllers<T>(
+        proportional_gains: impl Strategy<Value = T>,
+        integral_time_constants: impl Strategy<Value = T>,
+        derivative_time_constants: impl Strategy<Value = T>,
+        tracking_time_constants: impl Strategy<Value = T>,
+        derivative_gain_limits: impl Strategy<Value = T>,
+        set_point_coefficients: impl Strategy<Value = T>,
+    ) -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
+    where
+        T: num_traits::real::Real + Debug,
+    {
         (
-            any::<T>(),
-            any::<T>(),
-            any::<T>(),
-            any::<T>(),
-            any::<T>(),
-            any::<T>(),
+            proportional_gains,
+            integral_time_constants,
+            derivative_time_constants,
+            tracking_time_constants,
+            derivative_gain_limits,
+            set_point_coefficients,
         )
             .prop_map(
                 |(
@@ -262,10 +410,135 @@ mod tests {
             )
     }
 
+    /// This strategy generates `PidController<T>` structs whose configuration
+    /// parameters cover the entire permissible domain.
+    fn default_pid_controllers<T>() -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
+    where
+        T: num_traits::real::Real + Arbitrary
+    {
+        pid_controllers(
+            zero_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                zero_epsilon_inverse_bounded_numbers(),
+        )
+    }
+
+    /// This strategy generates ordered pairs of timestamps `(before, after)`
+    /// where `before` is guaranteed to be earlier than `after`.
+    fn ordered_system_times() -> impl Strategy<Value = (SystemTime, SystemTime)> {
+        (any::<SystemTime>(), any::<i32>(), 0u32..1_000_000_000u32).prop_map(
+            |(time, delta, nanos)| {
+                (
+                    time,
+                    time + Duration::new(delta.unsigned_abs() as u64, nanos),
+                )
+            },
+        )
+    }
+
+    //
+    // property-based tests
+    //
+
     proptest! {
+        //
+        // calculate_h tests
+        //
+
         #[test]
-        fn control_output_should_be_zero_initially(pid_controller in pid_controllers::<f64>()) {
-            assert_eq!(pid_controller.control_output(), 0.0);
+        fn calculate_h_returns_number_of_seconds_elapsed_f64(
+            (before, after) in ordered_system_times()
+        ) {
+            assert_eq!(
+                calculate_h::<f64>(after, before)
+                    .expect("calculate_h should succeed when measurement_time happens after last_update_time"),
+                after.duration_since(before).expect("before should come before after").as_secs_f64()
+            )
+        }
+
+        #[test]
+        fn calculate_h_returns_number_of_seconds_elapsed_f32(
+            (before, after) in ordered_system_times()
+        ) {
+            assert_eq!(
+                calculate_h::<f32>(after, before)
+                    .expect("calculate_h should succeed when measurement_time happens after last_update_time"),
+                after.duration_since(before).expect("before should come before after").as_secs_f32()
+            )
+        }
+
+        #[test]
+        fn calculate_h_returns_err_when_measurement_time_before_last_update_time_f64(
+            (before, after) in ordered_system_times()
+        ) {
+            calculate_h::<f64>(before, after)
+                .expect_err("calculate_h should fail when measurement_time happens before last_update_time");
+        }
+
+        #[test]
+        fn calculate_h_returns_err_when_measurement_time_before_last_update_time_f32(
+            (before, after) in ordered_system_times()
+        ) {
+            calculate_h::<f32>(before, after)
+                .expect_err("calculate_h should fail when measurement_time happens before last_update_time");
+        }
+
+        //
+        // PidController tests
+        //
+
+        #[test]
+        fn control_output_should_be_zero_initially_f64(
+            pid_controller in default_pid_controllers::<f64>()
+        ) {
+            assert_eq!(
+                pid_controller
+                    .expect("constructor should not error")
+                    .control_output(),
+                0.0
+            );
+        }
+
+        #[test]
+        fn control_output_should_be_zero_initially_f32(
+            pid_controller in default_pid_controllers::<f32>()
+        ) {
+            assert_eq!(
+                pid_controller
+                    .expect("constructor should not error")
+                    .control_output(),
+                0.0
+            );
+        }
+
+        #[test]
+        fn trivial_update_should_not_fail_f64(
+            pid_controller in default_pid_controllers::<f64>()
+        ) {
+            std::thread::sleep(Duration::from_millis(10));
+            assert_eq!(
+                pid_controller
+                    .expect("constructor should not error")
+                    .update(0.0, 0.0, SystemTime::now(), 0.0, 0.0)
+                    .expect("update should not fail"),
+                0.0
+            );
+        }
+
+        #[test]
+        fn trivial_update_should_not_fail_f32(
+            pid_controller in default_pid_controllers::<f32>()
+        ) {
+            assert_eq!(
+                pid_controller
+                    .expect("constructor should not error")
+                    .update(0.0, 0.0, SystemTime::now(), 0.0, 0.0)
+                    .expect("update should not fail"),
+                0.0
+            );
         }
     }
 }
