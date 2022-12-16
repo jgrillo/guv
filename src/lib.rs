@@ -64,7 +64,6 @@ where
     D_k1: T,
     r_k1: T,
     y_k1: T,
-    y_k2: T,
     t_k1: SystemTime,
 }
 
@@ -107,27 +106,43 @@ where
         derivative_gain_limit: T,
         set_point_coefficient: T,
     ) -> Result<Self, PidControllerError> {
-        if integral_time_constant <= T::zero() {
+        let zero = T::zero();
+        let eps = T::epsilon();
+        let n_max = T::one() / eps;
+
+        if proportional_gain < zero || proportional_gain > n_max {
             return Err(PidControllerError::Numeric(
-                "integral_time_constant must be greater than zero",
+                "proportional_gain must be in [T::zero(), 1 / T::epsilon()]",
             ));
         }
 
-        if derivative_time_constant <= T::zero() {
+        if integral_time_constant < eps || integral_time_constant > n_max {
             return Err(PidControllerError::Numeric(
-                "derivative_time_constant must be greater than zero",
+                "integral_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
             ));
         }
 
-        if tracking_time_constant <= T::zero() {
+        if derivative_time_constant < eps || derivative_time_constant > n_max {
             return Err(PidControllerError::Numeric(
-                "tracking_time_constant must be greater than zero",
+                "derivative_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
             ));
         }
 
-        if derivative_gain_limit <= T::zero() {
+        if tracking_time_constant < eps || tracking_time_constant > n_max {
             return Err(PidControllerError::Numeric(
-                "derivative_gain_limit must be greater than zero",
+                "tracking_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if derivative_gain_limit < eps || derivative_gain_limit > n_max {
+            return Err(PidControllerError::Numeric(
+                "derivative_gain_limit must be in (T::epsilon(), 1 / T::epsilon()]",
+            ));
+        }
+
+        if set_point_coefficient < zero || set_point_coefficient > n_max {
+            return Err(PidControllerError::Numeric(
+                "set_point_coefficient must be in [T::zero(), 1 / T::epsilon()]",
             ));
         }
 
@@ -138,12 +153,11 @@ where
             T_t: tracking_time_constant,
             N: derivative_gain_limit,
             b: set_point_coefficient,
-            P_k1: T::zero(),
-            I_k1: T::zero(),
-            D_k1: T::zero(),
-            r_k1: T::zero(),
-            y_k1: T::zero(),
-            y_k2: T::zero(),
+            P_k1: zero,
+            I_k1: zero,
+            D_k1: zero,
+            r_k1: zero,
+            y_k1: zero,
             t_k1: SystemTime::now(),
         })
     }
@@ -195,7 +209,7 @@ where
     }
 
     fn calculate_P(&self, r_k: T, y_k: T) -> T {
-        self.P_k1 + self.K * (self.b * r_k - y_k - self.b * self.r_k1 + self.y_k1)
+        self.K * (self.b * r_k - y_k)
     }
 
     fn calculate_I(&self, h: T, r_k: T, y_k: T, u: T, v: T) -> T {
@@ -221,11 +235,7 @@ where
             (a_i, b_i)
         };
 
-        if T::one() - a_i < two * T::epsilon() {
-            panic!("a_i is too close to 1.0, this will cause NaN on L228"); // FIXME: figure this out
-        }
-
-        Ok(self.D_k1 + (b_i / (T::one() - a_i)) * (y_k - two * self.y_k1 + self.y_k2))
+        Ok(a_i * self.D_k1 + b_i * (y_k - self.y_k1))
     }
 
     fn update_state(
@@ -249,7 +259,6 @@ where
         self.I_k1 = self.calculate_I(h, r_k, y_k, u, v);
 
         self.r_k1 = r_k;
-        self.y_k2 = self.y_k1;
         self.y_k1 = y_k;
 
         Ok(self.control_output())
@@ -297,6 +306,68 @@ mod tests {
     // proptest strategies
     //
 
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `(T::epsilon(), T::max_value()]`
+    fn positive_nonzero_numbers<T>() -> impl Strategy<Value = T>
+    where
+        T: num_traits::real::Real + Arbitrary,
+    {
+        any::<T>().prop_map(|n| {
+            let eps = T::epsilon();
+            let n_abs = n.abs();
+
+            if n_abs <= eps {
+                n_abs + eps
+            } else {
+                n_abs
+            }
+        })
+    }
+
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `(T::epsilon(), 1 / T::epsilon()]`
+    fn epsilon_epsilon_inverse_bounded_numbers<T>() -> impl Strategy<Value = T>
+    where
+        T: num_traits::real::Real + Arbitrary,
+    {
+        positive_nonzero_numbers::<T>().prop_map(|n| {
+            let one = T::one();
+            let two = T::from(2.0).expect("2.0 must be representable by T");
+            let eps = T::epsilon();
+            let n_max = one / eps;
+
+            if n > n_max {
+                let val = n_max * ((n.sin() + one) / two);
+
+                if val > eps {
+                    val
+                } else {
+                    eps
+                }
+            } else {
+                n
+            }
+        })
+    }
+
+    /// This strategy generates real numbers of type `T` on the interval
+    /// `[T::zero(), 1 / T::epsilon()]`
+    fn zero_epsilon_inverse_bounded_numbers<T>() -> impl Strategy<Value = T>
+    where
+        T: num_traits::real::Real + Arbitrary,
+    {
+        any::<T>().prop_map(|n| {
+            let one = T::one();
+            let two = T::from(2.0).expect("2.0 must be representable by T");
+            let n_max = one / T::epsilon();
+
+            n_max * ((n.sin() + one) / two)
+        })
+    }
+
+    /// This strategy generates `PidController<T>` structs whose configuration
+    /// parameters are themselves individually populated by the given argument
+    /// strategies.
     fn pid_controllers<T>(
         proportional_gains: impl Strategy<Value = T>,
         integral_time_constants: impl Strategy<Value = T>,
@@ -337,19 +408,24 @@ mod tests {
             )
     }
 
-    fn positive_nonzero_numbers<T>() -> impl Strategy<Value = T>
+    /// This strategy generates `PidController<T>` structs whose configuration
+    /// parameters cover the entire permissible domain.
+    fn default_pid_controllers<T>() -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
     where
-        T: num_traits::real::Real + Arbitrary,
+        T: num_traits::real::Real + Arbitrary
     {
-        any::<T>().prop_map(|n| {
-            if n.is_zero() {
-                n.abs() + T::epsilon()
-            } else {
-                n.abs()
-            }
-        })
+        pid_controllers(
+            zero_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                epsilon_epsilon_inverse_bounded_numbers(),
+                zero_epsilon_inverse_bounded_numbers(),
+        )
     }
 
+    /// This strategy generates ordered pairs of timestamps `(before, after)`
+    /// where `before` is guaranteed to be earlier than `after`.
     fn ordered_system_times() -> impl Strategy<Value = (SystemTime, SystemTime)> {
         (any::<SystemTime>(), any::<i32>(), 0u32..1_000_000_000u32).prop_map(
             |(time, delta, nanos)| {
@@ -414,14 +490,7 @@ mod tests {
 
         #[test]
         fn control_output_should_be_zero_initially_f64(
-            pid_controller in pid_controllers::<f64>(
-                any::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                any::<f64>()
-            )
+            pid_controller in default_pid_controllers::<f64>()
         ) {
             assert_eq!(
                 pid_controller
@@ -433,14 +502,7 @@ mod tests {
 
         #[test]
         fn control_output_should_be_zero_initially_f32(
-            pid_controller in pid_controllers::<f32>(
-                any::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                any::<f32>()
-            )
+            pid_controller in default_pid_controllers::<f32>()
         ) {
             assert_eq!(
                 pid_controller
@@ -451,15 +513,8 @@ mod tests {
         }
 
         #[test]
-        fn update_should_not_fail_f64(
-            pid_controller in pid_controllers::<f64>(
-                any::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                positive_nonzero_numbers::<f64>(),
-                any::<f64>(),
-            ),
+        fn trivial_update_should_not_fail_f64(
+            pid_controller in default_pid_controllers::<f64>()
         ) {
             std::thread::sleep(Duration::from_millis(10));
             assert_eq!(
@@ -472,15 +527,8 @@ mod tests {
         }
 
         #[test]
-        fn update_should_not_fail_f32(
-            pid_controller in pid_controllers::<f32>(
-                any::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                positive_nonzero_numbers::<f32>(),
-                any::<f32>(),
-            ),
+        fn trivial_update_should_not_fail_f32(
+            pid_controller in default_pid_controllers::<f32>()
         ) {
             assert_eq!(
                 pid_controller
