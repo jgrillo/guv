@@ -77,27 +77,29 @@ where
     /// # Arguments:
     /// \
     /// - `proportional_gain` -- The output the controller is multiplied by this
-    ///   factor.
+    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
     /// \
     /// - `integral_time_constant` -- The time required for the integral term to
     ///   "catch up to" the proportional term in the face of an instantaneous
-    ///   jump in controller error. Must greater than zero.
+    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `derivative_time_constant` -- The time required for the proportional
     ///   term to "catch up to" the derivative term if the error starts at zero
-    ///   and increases at a fixed rate. Must be greater than zero.
+    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `tracking_time_constant` -- The time required for the integral term to
     ///   "reset". This is necessary to prevent integral wind-up. Must be
-    ///   greater than zero.
+    ///   in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
     /// - `derivative_gain_limit` -- This term mitigates the effects of high
     ///   frequency noise in the derivative term by limiting the gain, which in
     ///   turn limits the high frequency noise amplification factor. Must be
-    ///   greater than zero.
+    ///   in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
+    ///
     /// - `set_point_coefficient` -- This term determines how the controller
-    ///   reacts to a change in the setpoint.
+    ///   reacts to a change in the setpoint. Must be in
+    ///   `[T::zero(), 1 / T::epsilon()]`.
     pub fn new(
         proportional_gain: T,
         integral_time_constant: T,
