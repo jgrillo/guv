@@ -96,7 +96,6 @@ where
     ///   turn limits the high frequency noise amplification factor. Must be
     ///   in `(T::epsilon(), 1 / T::epsilon()]`.
     /// \
-    ///
     /// - `set_point_coefficient` -- This term determines how the controller
     ///   reacts to a change in the setpoint. Must be in
     ///   `[T::zero(), 1 / T::epsilon()]`.
@@ -412,17 +411,18 @@ mod tests {
 
     /// This strategy generates `PidController<T>` structs whose configuration
     /// parameters cover the entire permissible domain.
-    fn default_pid_controllers<T>() -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
+    fn default_pid_controllers<T>(
+    ) -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
     where
-        T: num_traits::real::Real + Arbitrary
+        T: num_traits::real::Real + Arbitrary,
     {
         pid_controllers(
             zero_epsilon_inverse_bounded_numbers(),
-                epsilon_epsilon_inverse_bounded_numbers(),
-                epsilon_epsilon_inverse_bounded_numbers(),
-                epsilon_epsilon_inverse_bounded_numbers(),
-                epsilon_epsilon_inverse_bounded_numbers(),
-                zero_epsilon_inverse_bounded_numbers(),
+            epsilon_epsilon_inverse_bounded_numbers(),
+            epsilon_epsilon_inverse_bounded_numbers(),
+            epsilon_epsilon_inverse_bounded_numbers(),
+            epsilon_epsilon_inverse_bounded_numbers(),
+            zero_epsilon_inverse_bounded_numbers(),
         )
     }
 
