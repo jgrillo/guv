@@ -133,9 +133,7 @@ where
     }
 
     /// Updates this controller's state according to the given
-    /// parameters. Returns the updated control output, or a
-    /// `PidControllerError` if the `measurement_time` is in the future relative
-    /// to the system clock.
+    /// parameters. Returns the updated control output.
     /// \
     /// # Arguments:
     /// \
@@ -143,7 +141,7 @@ where
     /// \
     /// - `process_measurement` -- the measured process variable value
     /// \
-    /// - `measurement_time_delta` -- the interval of time between the previous
+    /// - `measurement_time_interval` -- the elapsed time between the previous
     ///   and current `process_measurement`
     /// \
     /// - `lower_saturation_limit` -- the minimum value the controller can take
@@ -153,12 +151,12 @@ where
         &mut self,
         set_point: T,
         process_measurement: T,
-        measurement_time_delta: T,
+        measurement_time_interval: T,
         lower_saturation_limit: T,
         upper_saturation_limit: T,
     ) -> T {
         self.update_state(
-            measurement_time_delta,
+            measurement_time_interval,
             set_point,
             process_measurement,
             lower_saturation_limit,
