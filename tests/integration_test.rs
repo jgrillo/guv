@@ -219,7 +219,7 @@ proptest! {
 //
 
 fn process(u: f64, y: f64, t: f64) -> f64 {
-    -0.105 * y * t + 0.105 * u * (t + 2.0).powf(t.cos())
+    -0.105 * y * t + 0.105 * u * (t + 2.0) + (2.0 * std::f64::consts::PI * t).cos()
 }
 
 #[test]
@@ -267,9 +267,9 @@ fn test_plot_interactive() {
         let set_point = if n < 100 {
             0.0
         } else if n > 600 {
-            -1.0
+            -3.0
         } else {
-            1.0
+            3.0
         };
 
         set_points.push((t, set_point));
@@ -279,7 +279,13 @@ fn test_plot_interactive() {
         previous_process_measurement = process_measurement;
 
         let control_output = pid_controller
-            .update(set_point, process_measurement, h, -5.0, 5.0);
+            .update(
+                set_point,
+                process_measurement,
+                h,
+                -7.0,
+                7.0
+            );
         control_outputs.push((t, control_output));
         previous_control_output = control_output;
 
