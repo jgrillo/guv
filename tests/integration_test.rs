@@ -1,3 +1,7 @@
+//! Run these tests with `cargo test --all-features`
+
+#![cfg(feature = "std")]
+
 use std::{
     fmt::Debug,
     time::{Duration, SystemTime},
@@ -6,12 +10,7 @@ use std::{
 use plotters::prelude::*;
 use proptest::prelude::*;
 
-#[cfg(feature = "std")]
-use guv::{
-    std::calculate_h,
-    PidController,
-    PidControllerError,
-};
+use guv::{std::calculate_h, PidController, PidControllerError};
 
 //
 // proptest strategies
@@ -246,13 +245,8 @@ fn test_plot_interactive() {
         .draw()
         .expect("configuring mesh should not fail");
 
-    let mut pid_controller = PidController::<f64>::new(
-        0.05,
-        0.01,
-        0.0001,
-        0.01,
-    )
-    .expect("constructing pid_controller should not fail");
+    let mut pid_controller = PidController::<f64>::new(0.05, 0.01, 0.0001, 0.01)
+        .expect("constructing pid_controller should not fail");
 
     let h = 0.01; // 10ms
 
@@ -278,14 +272,7 @@ fn test_plot_interactive() {
         process_measurements.push((t, process_measurement));
         previous_process_measurement = process_measurement;
 
-        let control_output = pid_controller
-            .update(
-                set_point,
-                process_measurement,
-                h,
-                -7.0,
-                7.0
-            );
+        let control_output = pid_controller.update(set_point, process_measurement, h, -7.0, 7.0);
         control_outputs.push((t, control_output));
         previous_control_output = control_output;
 

@@ -57,7 +57,6 @@ where
     T_i: T,
     T_d: T,
     b: T,
-    two: T,
     u: T,
     r_1: T,
     y_1: T,
@@ -96,9 +95,6 @@ where
         let zero = T::zero();
         let eps = T::epsilon();
         let max = T::one() / eps;
-        let two = T::from(2.0).ok_or(PidControllerError::Numeric(
-            "2.0 must be representable by T",
-        ))?;
 
         if proportional_gain < zero || proportional_gain > max {
             return Err(PidControllerError::InvalidParameter(
@@ -129,7 +125,6 @@ where
             T_i: integral_time_constant,
             T_d: derivative_time_constant,
             b: set_point_coefficient,
-            two,
             u: zero,
             r_1: zero,
             y_1: zero,
@@ -180,7 +175,9 @@ where
     }
 
     fn delta_D(&self, h: T, y: T) -> T {
-        ((-self.K * self.T_d) / h) * (y - self.two * self.y_1 + self.y_2)
+        let two = T::one() + T::one();
+
+        ((-self.K * self.T_d) / h) * (y - two * self.y_1 + self.y_2)
     }
 
     fn update_state(&mut self, h: T, r: T, y: T, u_low: T, u_high: T) -> T {
@@ -211,7 +208,12 @@ pub mod std {
 
     impl From<SystemTimeError> for PidControllerError {
         fn from(e: SystemTimeError) -> Self {
-            let msg = if let Some(msg) = format_args!("measurement time was before last update time: {:?}", e.duration()).as_str() {
+            let msg = if let Some(msg) = format_args!(
+                "measurement time was before last update time: {:?}",
+                e.duration()
+            )
+            .as_str()
+            {
                 msg
             } else {
                 "measurement time was before last update time"
