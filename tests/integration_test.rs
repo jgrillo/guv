@@ -217,13 +217,15 @@ proptest! {
 // visual tests
 //
 
-fn process(u: f64, y: f64, t: f64) -> f64 {
-    -0.105 * y * t + 0.105 * u * (t + 2.0) + (2.0 * std::f64::consts::PI * t).cos()
+fn process<T: num_traits::float::Float>(u: T, y: T, t: T) -> T {
+    T::from(-0.105).unwrap() * y * t
+        + T::from(0.105).unwrap() * u * (t + T::from(2.0).unwrap())
+        + (T::from(2.0).unwrap() * T::from(std::f32::consts::PI).unwrap() * t).cos()
 }
 
 #[test]
-fn test_plot_interactive() {
-    let root = SVGBackend::new("test-output/1.svg", (640, 480)).into_drawing_area();
+fn test_plot_f64() {
+    let root = SVGBackend::new("test-output/1_f64.svg", (640, 480)).into_drawing_area();
     root.fill(&WHITE).expect("background fill should not error");
     let root = root.margin(10, 10, 10, 10);
 
@@ -281,13 +283,108 @@ fn test_plot_interactive() {
 
     chart
         .draw_series(LineSeries::new(set_points, BLUE))
-        .expect("set points should be plottable");
+        .expect("set points should be plottable")
+        .label("set point")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
     chart
         .draw_series(LineSeries::new(control_outputs, GREEN))
-        .expect("control outputs should be plottable");
+        .expect("control outputs should be plottable")
+        .label("control output")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
     chart
         .draw_series(LineSeries::new(process_measurements, RED))
-        .expect("process measurements should be plottable");
+        .expect("process measurements should be plottable")
+        .label("process measurement")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    chart.configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()
+        .expect("drawing the legend should not fail");
+
+    root.present().expect("presentation should not fail")
+}
+
+#[test]
+fn test_plot_f32() {
+    let root = SVGBackend::new("test-output/1_f32.svg", (640, 480)).into_drawing_area();
+    root.fill(&WHITE).expect("background fill should not error");
+    let root = root.margin(10, 10, 10, 10);
+
+    let mut chart = ChartBuilder::on(&root)
+        .caption(
+            "PidController impulse response",
+            ("sans-serif", 40).into_font(),
+        )
+        .x_label_area_size(20)
+        .y_label_area_size(40)
+        .build_cartesian_2d(0f32..10f32, -10f32..10f32)
+        .expect("building the chart should not error");
+
+    chart
+        .configure_mesh()
+        .x_labels(5)
+        .y_labels(5)
+        .y_label_formatter(&|y| format!("{:.3}", y))
+        .draw()
+        .expect("configuring mesh should not fail");
+
+    let mut pid_controller = PidController::<f32>::new(0.05, 0.01, 0.0001, 0.01)
+        .expect("constructing pid_controller should not fail");
+
+    let h = 0.01; // 10ms
+
+    let mut set_points: Vec<(f32, f32)> = Vec::with_capacity(1000);
+    let mut control_outputs: Vec<(f32, f32)> = Vec::with_capacity(1000);
+    let mut process_measurements: Vec<(f32, f32)> = Vec::with_capacity(1000);
+    let mut previous_process_measurement = 0.0f32;
+    let mut previous_control_output = 0.0f32;
+    let mut t = 0.0f32;
+
+    for n in 0u32..1000u32 {
+        let set_point = if n < 100 {
+            0.0f32
+        } else if n > 600 {
+            -3.0f32
+        } else {
+            3.0f32
+        };
+
+        set_points.push((t, set_point));
+
+        let process_measurement = process(previous_control_output, previous_process_measurement, t);
+        process_measurements.push((t, process_measurement));
+        previous_process_measurement = process_measurement;
+
+        let control_output = pid_controller.update(set_point, process_measurement, h, -7.0, 7.0);
+        control_outputs.push((t, control_output));
+        previous_control_output = control_output;
+
+        t += h;
+    }
+
+    chart
+        .draw_series(LineSeries::new(set_points, BLUE))
+        .expect("set points should be plottable")
+        .label("set point")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+    chart
+        .draw_series(LineSeries::new(control_outputs, GREEN))
+        .expect("control outputs should be plottable")
+        .label("control output")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+    chart
+        .draw_series(LineSeries::new(process_measurements, RED))
+        .expect("process measurements should be plottable")
+        .label("process measurement")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    chart.configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()
+        .expect("drawing the legend should not fail");
 
     root.present().expect("presentation should not fail")
 }
