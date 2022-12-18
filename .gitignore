@@ -11,6 +11,7 @@ Cargo.lock
 
 # Proptest
 proptest-regressions
+*.proptest-regressions
 
 # Graphs
 test-output

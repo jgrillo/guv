@@ -48,7 +48,7 @@ impl Display for PidControllerError {
 /// jgrillo@protonmail.com
 /// ```
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct PidController<T>
 where
     T: num_traits::real::Real + Debug,
@@ -61,6 +61,55 @@ where
     r_1: T,
     y_1: T,
     y_2: T,
+}
+
+fn check_constants<T>(
+    proportional_gain: T,
+    integral_time_constant: T,
+    derivative_time_constant: T,
+    set_point_coefficient: T,
+    initial_controller_output: Option<T>,
+) -> Result<(), PidControllerError>
+where
+    T: num_traits::real::Real,
+{
+    let zero = T::zero();
+    let eps = T::epsilon();
+    let max = T::one() / eps;
+
+    if proportional_gain < zero || proportional_gain > max {
+        return Err(PidControllerError::InvalidParameter(
+            "proportional_gain must be in [T::zero(), 1 / T::epsilon()]",
+        ));
+    }
+
+    if integral_time_constant < eps || integral_time_constant > max {
+        return Err(PidControllerError::InvalidParameter(
+            "integral_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+        ));
+    }
+
+    if derivative_time_constant < eps || derivative_time_constant > max {
+        return Err(PidControllerError::InvalidParameter(
+            "derivative_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
+        ));
+    }
+
+    if set_point_coefficient < zero || set_point_coefficient > max {
+        return Err(PidControllerError::InvalidParameter(
+            "set_point_coefficient must be in [T::zero(), 1 / T::epsilon()]",
+        ));
+    }
+
+    if let Some(u_0) = initial_controller_output {
+        if u_0 < zero || set_point_coefficient > max {
+            return Err(PidControllerError::InvalidParameter(
+                "initial_controller_output must be in [T::zero(), 1 / T::epsilon()]",
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 #[allow(non_snake_case)]
@@ -86,50 +135,130 @@ where
     /// - `set_point_coefficient` -- This term determines how the controller
     ///   reacts to a change in the setpoint. Must be in
     ///   `[T::zero(), 1 / T::epsilon()]`.
+    /// \
+    /// - `initial_controller_output` -- The controller will return this value
+    ///   until it is updated. Must be in `[T::zero(), 1 / T::epsilon()]`.
     pub fn new(
         proportional_gain: T,
         integral_time_constant: T,
         derivative_time_constant: T,
         set_point_coefficient: T,
+        initial_controller_output: T,
     ) -> Result<Self, PidControllerError> {
+        check_constants(
+            proportional_gain,
+            integral_time_constant,
+            derivative_time_constant,
+            set_point_coefficient,
+            Some(initial_controller_output),
+        )?;
+
         let zero = T::zero();
-        let eps = T::epsilon();
-        let max = T::one() / eps;
-
-        if proportional_gain < zero || proportional_gain > max {
-            return Err(PidControllerError::InvalidParameter(
-                "proportional_gain must be in [T::zero(), 1 / T::epsilon()]",
-            ));
-        }
-
-        if integral_time_constant < eps || integral_time_constant > max {
-            return Err(PidControllerError::InvalidParameter(
-                "integral_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
-            ));
-        }
-
-        if derivative_time_constant < eps || derivative_time_constant > max {
-            return Err(PidControllerError::InvalidParameter(
-                "derivative_time_constant must be in (T::epsilon(), 1 / T::epsilon()]",
-            ));
-        }
-
-        if set_point_coefficient < zero || set_point_coefficient > max {
-            return Err(PidControllerError::InvalidParameter(
-                "set_point_coefficient must be in [T::zero(), 1 / T::epsilon()]",
-            ));
-        }
 
         Ok(Self {
             K: proportional_gain,
             T_i: integral_time_constant,
             T_d: derivative_time_constant,
             b: set_point_coefficient,
-            u: zero,
+            u: initial_controller_output,
             r_1: zero,
             y_1: zero,
             y_2: zero,
         })
+    }
+
+    /// Constructs a new PidController whose internal state is copied from this
+    /// one except for the provided constants. The new PidController is
+    /// effectively an updated copy of this one where only the provided
+    /// constants have changed.
+    /// \
+    /// # Arguments:
+    /// \
+    /// - `proportional_gain` -- The output the controller is multiplied by this
+    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
+    /// \
+    /// - `integral_time_constant` -- The time required for the integral term to
+    ///   "catch up to" the proportional term in the face of an instantaneous
+    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    /// \
+    /// - `derivative_time_constant` -- The time required for the proportional
+    ///   term to "catch up to" the derivative term if the error starts at zero
+    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    /// \
+    /// - `set_point_coefficient` -- This term determines how the controller
+    ///   reacts to a change in the setpoint. Must be in
+    ///   `[T::zero(), 1 / T::epsilon()]`.
+    pub fn update_constants(
+        &self,
+        proportional_gain: T,
+        integral_time_constant: T,
+        derivative_time_constant: T,
+        set_point_coefficient: T,
+    ) -> Result<Self, PidControllerError> {
+        check_constants(
+            proportional_gain,
+            integral_time_constant,
+            derivative_time_constant,
+            set_point_coefficient,
+            None,
+        )?;
+
+        Ok(Self {
+            K: proportional_gain,
+            T_i: integral_time_constant,
+            T_d: derivative_time_constant,
+            b: set_point_coefficient,
+            u: self.u,
+            r_1: self.r_1,
+            y_1: self.y_1,
+            y_2: self.y_2,
+        })
+    }
+
+    /// Update this PidController's internal state with the provided constants.
+    /// \
+    /// # Arguments:
+    /// \
+    /// - `proportional_gain` -- The output the controller is multiplied by this
+    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
+    /// \
+    /// - `integral_time_constant` -- The time required for the integral term to
+    ///   "catch up to" the proportional term in the face of an instantaneous
+    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    /// \
+    /// - `derivative_time_constant` -- The time required for the proportional
+    ///   term to "catch up to" the derivative term if the error starts at zero
+    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    /// \
+    /// - `set_point_coefficient` -- This term determines how the controller
+    ///   reacts to a change in the setpoint. Must be in
+    ///   `[T::zero(), 1 / T::epsilon()]`.
+    pub fn update_constants_mut(
+        &mut self,
+        proportional_gain: T,
+        integral_time_constant: T,
+        derivative_time_constant: T,
+        set_point_coefficient: T,
+    ) -> Result<(), PidControllerError> {
+        check_constants(
+            proportional_gain,
+            integral_time_constant,
+            derivative_time_constant,
+            set_point_coefficient,
+            None,
+        )?;
+
+        self.K = proportional_gain;
+        self.T_i = integral_time_constant;
+        self.T_d = derivative_time_constant;
+        self.b = set_point_coefficient;
+
+        Ok(())
+    }
+
+    /// Returns the most recently computed control output
+    pub fn control_output(&self) -> T {
+        self.u
     }
 
     /// Updates this controller's state according to the given

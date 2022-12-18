@@ -83,6 +83,7 @@ fn pid_controllers<T>(
     integral_time_constants: impl Strategy<Value = T>,
     derivative_time_constants: impl Strategy<Value = T>,
     set_point_coefficients: impl Strategy<Value = T>,
+    initial_controller_outputs: impl Strategy<Value = T>,
 ) -> impl Strategy<Value = Result<PidController<T>, PidControllerError>>
 where
     T: num_traits::real::Real + Debug,
@@ -92,6 +93,7 @@ where
         integral_time_constants,
         derivative_time_constants,
         set_point_coefficients,
+        initial_controller_outputs,
     )
         .prop_map(
             |(
@@ -99,12 +101,14 @@ where
                 integral_time_constant,
                 derivative_time_constant,
                 set_point_coefficient,
+                initial_controller_output,
             )| {
                 PidController::new(
                     proportional_gain,
                     integral_time_constant,
                     derivative_time_constant,
                     set_point_coefficient,
+                    initial_controller_output,
                 )
             },
         )
@@ -121,6 +125,7 @@ where
         zero_epsilon_inverse_bounded_numbers(),
         epsilon_epsilon_inverse_bounded_numbers(),
         epsilon_epsilon_inverse_bounded_numbers(),
+        zero_epsilon_inverse_bounded_numbers(),
         zero_epsilon_inverse_bounded_numbers(),
     )
 }
@@ -191,27 +196,179 @@ proptest! {
     fn trivial_update_should_not_fail_f64(
         pid_controller in default_pid_controllers::<f64>()
     ) {
-        std::thread::sleep(Duration::from_millis(10));
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
+
         assert_eq!(
             pid_controller
-                .expect("constructor should not error")
                 .update(0.0, 0.0, 0.001, 0.0, 0.0),
             0.0
         );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
     }
 
     #[test]
     fn trivial_update_should_not_fail_f32(
         pid_controller in default_pid_controllers::<f32>()
     ) {
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
         assert_eq!(
             pid_controller
-                .expect("constructor should not error")
                 .update(0.0, 0.0, 0.001, 0.0, 0.0),
             0.0
         );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
+    }
+
+    #[test]
+    fn in_place_constants_update_should_not_fail_f64(
+        proportional_gain in zero_epsilon_inverse_bounded_numbers(),
+        integral_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        derivative_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        set_point_coefficient in zero_epsilon_inverse_bounded_numbers(),
+        pid_controller in default_pid_controllers::<f64>(),
+    ) {
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        pid_controller
+            .update_constants_mut(
+                proportional_gain,
+                integral_time_constant,
+                derivative_time_constant,
+                set_point_coefficient,
+            )
+            .expect("updating constants should not fail");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
+    }
+
+    #[test]
+    fn in_place_constants_update_should_not_fail_f32(
+        proportional_gain in zero_epsilon_inverse_bounded_numbers(),
+        integral_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        derivative_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        set_point_coefficient in zero_epsilon_inverse_bounded_numbers(),
+        pid_controller in default_pid_controllers::<f32>(),
+    ) {
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        pid_controller
+            .update_constants_mut(
+                proportional_gain,
+                integral_time_constant,
+                derivative_time_constant,
+                set_point_coefficient,
+            )
+            .expect("updating constants should not fail");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
+    }
+
+    #[test]
+    fn copy_constants_update_should_not_fail_f64(
+        proportional_gain in zero_epsilon_inverse_bounded_numbers(),
+        integral_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        derivative_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        set_point_coefficient in zero_epsilon_inverse_bounded_numbers(),
+        pid_controller in default_pid_controllers::<f64>(),
+    ) {
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        let mut another_pid_controller = pid_controller
+            .update_constants(
+                proportional_gain,
+                integral_time_constant,
+                derivative_time_constant,
+                set_point_coefficient,
+            )
+            .expect("updating constants should not fail");
+
+        assert_eq!(
+            another_pid_controller
+                .update(1000.0, 1000.0, std::f64::EPSILON, -1.0, 1.0)
+                .abs(),
+            1.0
+        );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
+        assert_eq!(another_pid_controller.control_output().abs(), 1.0);
+    }
+
+    #[test]
+    fn copy_constants_update_should_not_fail_f32(
+        proportional_gain in zero_epsilon_inverse_bounded_numbers(),
+        integral_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        derivative_time_constant in epsilon_epsilon_inverse_bounded_numbers(),
+        set_point_coefficient in zero_epsilon_inverse_bounded_numbers(),
+        pid_controller in default_pid_controllers::<f32>(),
+    ) {
+        let mut pid_controller = pid_controller
+            .expect("constructor should not error");
+
+        assert_eq!(
+            pid_controller
+                .update(0.0, 0.0, 0.001, 0.0, 0.0),
+            0.0
+        );
+
+        let mut another_pid_controller = pid_controller
+            .update_constants(
+                proportional_gain,
+                integral_time_constant,
+                derivative_time_constant,
+                set_point_coefficient,
+            )
+            .expect("updating constants should not fail");
+
+        assert_eq!(
+            another_pid_controller
+                .update(1000.0, 1000.0, std::f32::EPSILON, -1.0, 1.0)
+                .abs(),
+            1.0
+        );
+
+        assert_eq!(pid_controller.control_output(), 0.0);
+        assert_eq!(another_pid_controller.control_output().abs(), 1.0);
     }
 }
+
+
 
 //
 // visual tests
@@ -247,7 +404,7 @@ fn test_plot_f64() {
         .draw()
         .expect("configuring mesh should not fail");
 
-    let mut pid_controller = PidController::<f64>::new(0.05, 0.01, 0.0001, 0.01)
+    let mut pid_controller = PidController::<f64>::new(0.05, 0.01, 0.0001, 0.01, 1.0)
         .expect("constructing pid_controller should not fail");
 
     let h = 0.01; // 10ms
@@ -297,7 +454,8 @@ fn test_plot_f64() {
         .label("process measurement")
         .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
-    chart.configure_series_labels()
+    chart
+        .configure_series_labels()
         .background_style(&WHITE.mix(0.8))
         .border_style(&BLACK)
         .draw()
@@ -330,7 +488,7 @@ fn test_plot_f32() {
         .draw()
         .expect("configuring mesh should not fail");
 
-    let mut pid_controller = PidController::<f32>::new(0.05, 0.01, 0.0001, 0.01)
+    let mut pid_controller = PidController::<f32>::new(0.05, 0.01, 0.0001, 0.01, 1.0)
         .expect("constructing pid_controller should not fail");
 
     let h = 0.01; // 10ms
@@ -380,7 +538,8 @@ fn test_plot_f32() {
         .label("process measurement")
         .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
-    chart.configure_series_labels()
+    chart
+        .configure_series_labels()
         .background_style(&WHITE.mix(0.8))
         .border_style(&BLACK)
         .draw()
