@@ -368,8 +368,6 @@ proptest! {
     }
 }
 
-
-
 //
 // visual tests
 //
