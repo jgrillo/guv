@@ -1,4 +1,4 @@
-name: Rust
+name: guv
 
 on:
   push:
@@ -16,9 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Lint (no_std)
+      run: cargo clippy --verbose
+    - name: Lint (all features)
+      run: cargo clippy --verbose --all-features
     - name: Build (no_std)
       run: cargo build --verbose --release
-    - name: Build (std)
+    - name: Build (all features)
       run: cargo build --verbose --release --features std
     - name: Run tests
       run: cargo test --verbose --all-features
