@@ -16,13 +16,51 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Lint (no_std)
+
+    - name: Formatting
+      run: cargo fmt --check
+
+    - name: Clippy (no_std)
       run: cargo clippy --verbose
-    - name: Lint (all features)
+    - name: Clippy (std)
+      run: cargo clippy --verbose --features="std"
+    - name: Clippy (fixed, no_std)
+      run: cargo clippy --verbose --features="fixed"
+    - name: Clippy (float, no_std)
+      run: cargo clippy --verbose --features="float"
+    - name: Clippy (fixed, std)
+      run: cargo clippy --verbose --features="fixed,std"
+    - name: Clippy (float, std)
+      run: cargo clippy --verbose --features="float,std"
+    - name: Clippy (all features)
       run: cargo clippy --verbose --all-features
+
     - name: Build (no_std)
       run: cargo build --verbose --release
+    - name: Build (std)
+      run: cargo build --verbose --release --features="std"
+    - name: Build (fixed, no_std)
+      run: cargo build --verbose --release --features="fixed"
+    - name: Build (float, no_std)
+      run: cargo build --verbose --release --features="float"
+    - name: Build (fixed, std)
+      run: cargo build --verbose --release --features="fixed,std"
+    - name: Build (float, std)
+      run: cargo build --verbose --release --features="float,std"
     - name: Build (all features)
-      run: cargo build --verbose --release --features std
-    - name: Run tests
+      run: cargo build --verbose --release --all-features
+
+    - name: Test (no_std)
+      run: cargo test --verbose
+    - name: Test (std)
+      run: cargo test --verbose --features="std"
+    - name: Test (fixed, no_std)
+      run: cargo test --verbose --features="fixed"
+    - name: Test (float, no_std)
+      run: cargo test --verbose --features="float"
+    - name: Test (fixed, std)
+      run: cargo test --verbose --features="fixed,std"
+    - name: Test (float, std)
+      run: cargo test --verbose --features="float,std"
+    - name: Test (all features)
       run: cargo test --verbose --all-features
