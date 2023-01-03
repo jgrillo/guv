@@ -1,22 +1,28 @@
 [package]
 name = "guv"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Jesse C. Grillo <jgrillo@protonmail.com>"]
 description = "A PID Controller"
 license = "Apache-2.0"
 repository = "https://github.com/jgrillo/guv"
 readme = "README.md"
 edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+rust-version = "1.60"
 
 [features]
 default = []
 std = []
+fixed = ["dep:fixed", "dep:cordic"]
+float = ["dep:num-traits"]
 
 [dependencies]
-num-traits = "0.2"
-thiserror = "1.0"
+fixed = { version = "1", optional = true }
+cordic = { version = "0.1", optional = true }
+num-traits = { version = "0.2", features = ["libm"], optional = true }
 
 [dev-dependencies]
+arbitrary = "1"
+fixed = { version = "1", features = ["arbitrary"] }
 plotters = "0.3"
-proptest = "1.0"
+proptest = "1"
+proptest-arbitrary-interop = "0.1"

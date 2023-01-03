@@ -4,10 +4,156 @@
 
 use core::{
     fmt::{Debug, Display},
+    ops::{Add, Div, Mul, Neg, Sub},
     result::Result,
 };
 
-#[derive(Clone, Debug)]
+/// This trait allows `PidController<T: Number>` to be defined abstractly over
+/// the underlying number type. Blanket implementations are (optionally)
+/// provided for the following types:
+/// \
+/// - `num_traits::real::Real + num_traits::FloatConst` if compiled with feature
+///   `"float"`
+/// - `fixed::traits::FixedSigned + cordic::CordicNumber` if compiled with
+///   feature `"fixed"`
+/// \
+/// **N.B.:** while these features aren't mutually exclusive--the crate will
+/// compile with them both activated--you'll have to supply your `PidController`
+/// with a type `T` which implements both `num_traits::real::Real` and
+/// `fixed::traits::FixedSigned`. If you accomplish this, please let me know!
+pub trait Number
+where
+    Self: Copy
+        + PartialOrd
+        + Div<Output = Self>
+        + Mul<Output = Self>
+        + Neg<Output = Self>
+        + Sub<Output = Self>
+        + Add<Output = Self>,
+{
+    fn zero() -> Self;
+
+    fn one() -> Self;
+
+    fn epsilon() -> Self;
+
+    fn pi() -> Self;
+
+    fn abs(&self) -> Self;
+
+    fn sin(&self) -> Self;
+
+    fn cos(&self) -> Self;
+}
+
+// we use this impl when "float" but not "fixed"
+#[cfg(all(feature = "float", not(feature = "fixed")))]
+impl<T> Number for T
+where
+    T: num_traits::real::Real + num_traits::FloatConst,
+{
+    fn zero() -> T {
+        T::zero()
+    }
+
+    fn one() -> T {
+        T::one()
+    }
+
+    fn epsilon() -> T {
+        T::epsilon()
+    }
+
+    fn pi() -> T {
+        T::PI()
+    }
+
+    fn abs(&self) -> T {
+        T::abs(*self)
+    }
+
+    fn sin(&self) -> T {
+        T::sin(*self)
+    }
+
+    fn cos(&self) -> T {
+        T::cos(*self)
+    }
+}
+
+// we use this impl when "fixed" but not "float"
+#[cfg(all(feature = "fixed", not(feature = "float")))]
+impl<T> Number for T
+where
+    T: fixed::traits::FixedSigned + cordic::CordicNumber,
+{
+    fn zero() -> T {
+        cordic::CordicNumber::zero()
+    }
+
+    fn one() -> T {
+        cordic::CordicNumber::one()
+    }
+
+    fn epsilon() -> T {
+        T::DELTA
+    }
+
+    fn pi() -> T {
+        cordic::CordicNumber::pi()
+    }
+
+    fn abs(&self) -> T {
+        T::abs(*self)
+    }
+
+    fn sin(&self) -> T {
+        cordic::sin(*self)
+    }
+
+    fn cos(&self) -> T {
+        cordic::cos(*self)
+    }
+}
+
+// We use this impl when both "float" and "fixed". This mostly just exists to
+// defeat the orphan rule. As far as I know there is no such T which implements
+// both FixedSigned and Real... yet.
+#[cfg(all(features = "fixed", feature = "float"))]
+impl<T> Number for T
+where
+    T: fixed::traits::FixedSigned + num_traits::real::Real,
+{
+    fn zero() -> T {
+        T::zero()
+    }
+
+    fn one() -> T {
+        T::one()
+    }
+
+    fn epsilon() -> T {
+        T::epsilon()
+    }
+
+    fn pi() -> T {
+        T::pi()
+    }
+
+    fn abs(&self) -> T {
+        T::abs(*self)
+    }
+
+    fn sin(&self) -> T {
+        T::sin(*self)
+    }
+
+    fn cos(&self) -> T {
+        T::cos(*self)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum PidControllerError {
     Numeric(&'static str),
@@ -25,44 +171,6 @@ impl Display for PidControllerError {
     }
 }
 
-/// This implementation of a PID controller comes from
-///
-/// ```text
-/// Åström, K. J., & Hägglund, T. (1988).
-/// Automatic Tuning of PID Controllers.
-/// Instrument Society of America (ISA).
-/// ISBN 1-55617-081-5
-/// ```
-///
-/// While I've used English natural language names for the public API, I've kept
-/// the mathematical symbols (at least within reason) faithful to their typeset
-/// representation. This code is meant to be read alongside a copy of the book!
-/// I found that keeping these variable names closely matched to the mathematics
-/// aids understanding by reducing the amount of mental indirection, making
-/// implementation errors easier to spot.
-///
-/// If you have any questions about this code feel free to reach out:
-///
-/// ```text
-/// Jesse C. Grillo
-/// jgrillo@protonmail.com
-/// ```
-#[allow(non_snake_case)]
-#[derive(Clone, Copy, Debug)]
-pub struct PidController<T>
-where
-    T: num_traits::real::Real + Debug,
-{
-    K: T,
-    T_i: T,
-    T_d: T,
-    b: T,
-    u: T,
-    r_1: T,
-    y_1: T,
-    y_2: T,
-}
-
 fn check_constants<T>(
     proportional_gain: T,
     integral_time_constant: T,
@@ -71,7 +179,7 @@ fn check_constants<T>(
     initial_controller_output: Option<T>,
 ) -> Result<(), PidControllerError>
 where
-    T: num_traits::real::Real,
+    T: Number,
 {
     let zero = T::zero();
     let eps = T::epsilon();
@@ -101,10 +209,10 @@ where
         ));
     }
 
-    if let Some(u_0) = initial_controller_output {
-        if u_0 < zero || set_point_coefficient > max {
+    if let Some(u0) = initial_controller_output {
+        if u0 < -max || u0 > max {
             return Err(PidControllerError::InvalidParameter(
-                "initial_controller_output must be in [T::zero(), 1 / T::epsilon()]",
+                "initial_controller_output must be in [-1 / T::epsilon(), 1 / T::epsilon()]",
             ));
         }
     }
@@ -112,10 +220,34 @@ where
     Ok(())
 }
 
+/// This implementation of a PID controller comes from
+///
+/// ```text
+/// Åström, K. J., & Hägglund, T. (1988).
+/// Automatic Tuning of PID Controllers.
+/// Instrument Society of America (ISA).
+/// ISBN 1-55617-081-5
+/// ```
+#[allow(non_snake_case)]
+#[derive(Clone, Copy, Debug)]
+pub struct PidController<T>
+where
+    T: Number + Debug,
+{
+    K: T,
+    T_i: T,
+    T_d: T,
+    b: T,
+    u: T,
+    r_1: T,
+    y_1: T,
+    y_2: T,
+}
+
 #[allow(non_snake_case)]
 impl<T> PidController<T>
 where
-    T: num_traits::real::Real + Debug,
+    T: Number + Debug,
 {
     /// Construct a new PidController.
     /// \
@@ -137,7 +269,7 @@ where
     ///   `[T::zero(), 1 / T::epsilon()]`.
     /// \
     /// - `initial_controller_output` -- The controller will return this value
-    ///   until it is updated. Must be in `[T::zero(), 1 / T::epsilon()]`.
+    ///   until it is updated. Must be in `[-1 / T::epsilon(), 1 / T::epsilon()]`.
     pub fn new(
         proportional_gain: T,
         integral_time_constant: T,
@@ -317,7 +449,7 @@ where
         // simulate saturating the output -- e.g. an actuator may have a
         // prescribed range beyond which it will not travel no matter the signal
         // it's given.
-        self.u = num_traits::clamp(self.u + delta_v, u_low, u_high);
+        self.u = clamp(self.u + delta_v, u_low, u_high);
 
         self.y_2 = self.y_1;
         self.r_1 = r;
@@ -327,10 +459,22 @@ where
     }
 }
 
+fn clamp<T>(input: T, min: T, max: T) -> T
+where
+    T: PartialOrd,
+{
+    if input < min {
+        min
+    } else if input > max {
+        max
+    } else {
+        input
+    }
+}
+
 #[cfg(feature = "std")]
 pub mod std {
-    use std::time::{SystemTime, SystemTimeError};
-
+    use std::time::SystemTimeError;
     use crate::PidControllerError;
 
     impl From<SystemTimeError> for PidControllerError {
@@ -350,28 +494,63 @@ pub mod std {
         }
     }
 
-    /// Compute the number of seconds that has elapsed between
-    /// `last_update_time` and `measurement_time`. Returns a
-    /// `PidControllerError` if `last_update_time` occurred after
-    /// `measurement_time`, or if there is a problem representing a number as
-    /// `T`.
-    pub fn calculate_h<T>(
-        measurement_time: SystemTime,
-        last_update_time: SystemTime,
-    ) -> Result<T, PidControllerError>
-    where
-        T: num_traits::real::Real,
-    {
-        let duration = measurement_time.duration_since(last_update_time)?;
+    #[cfg(feature = "fixed")]
+    pub mod fixed {
+        use std::time::SystemTime;
+        use crate::{Number, PidControllerError};
 
-        Ok(
-            T::from(duration.as_secs()).ok_or(PidControllerError::Numeric(
-                "duration's seconds part must be representable as T",
-            ))? + (T::from(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
-                "duration's nanoseconds part must be representable as T",
-            ))? / T::from(1_000_000_000).ok_or(PidControllerError::Numeric(
-                "1_000_000_000 must be representable as T",
-            ))?),
-        )
+        /// Compute the number of seconds that has elapsed between
+        /// `last_update_time` and `measurement_time`. Returns a
+        /// `PidControllerError` if `last_update_time` occurred after
+        /// `measurement_time`, or if there is a problem representing a number
+        /// as `T`.
+        pub fn calculate_h<T>(
+            measurement_time: SystemTime,
+            last_update_time: SystemTime,
+        ) -> Result<T, PidControllerError>
+        where
+            T: Number
+            + fixed::traits::LosslessTryFrom<u64>
+            + fixed::traits::LosslessTryFrom<u32>,
+        {
+            let duration = measurement_time.duration_since(last_update_time)?;
+
+            Ok(T::lossless_try_from(duration.as_secs()).ok_or(PidControllerError::Numeric(
+                "duration's seconds part must be representable as T"
+            ))? + (T::lossless_try_from(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
+                "duration's nanoseconds part must be representable as T"
+            ))? / T::lossless_try_from(1_000_000_000_u32).ok_or(PidControllerError::Numeric(
+                "1_000_000_000 must be representable as T"
+            ))?))
+        }
+    }
+
+    #[cfg(feature = "float")]
+    pub mod real {
+        use std::time::SystemTime;
+        use crate::{Number, PidControllerError};
+
+        /// Compute the number of seconds that has elapsed between
+        /// `last_update_time` and `measurement_time`. Returns a
+        /// `PidControllerError` if `last_update_time` occurred after
+        /// `measurement_time`, or if there is a problem representing a number
+        /// as `T`.
+        pub fn calculate_h<T>(
+            measurement_time: SystemTime,
+            last_update_time: SystemTime,
+        ) -> Result<T, PidControllerError>
+        where
+            T: Number + num_traits::cast::FromPrimitive,
+        {
+            let duration = measurement_time.duration_since(last_update_time)?;
+
+            Ok(T::from_u64(duration.as_secs()).ok_or(PidControllerError::Numeric(
+                "duration's seconds part must be representable as T"
+            ))? + (T::from_u32(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
+                "duration's nanoseconds part must be representable as T"
+            ))? / T::from_u32(1_000_000_000_u32).ok_or(PidControllerError::Numeric(
+                "1_000_000_000 must be representable as T"
+            ))?))
+        }
     }
 }
