@@ -474,8 +474,8 @@ where
 
 #[cfg(feature = "std")]
 pub mod std {
-    use std::time::SystemTimeError;
     use crate::PidControllerError;
+    use std::time::SystemTimeError;
 
     impl From<SystemTimeError> for PidControllerError {
         fn from(e: SystemTimeError) -> Self {
@@ -496,8 +496,8 @@ pub mod std {
 
     #[cfg(feature = "fixed")]
     pub mod fixed {
-        use std::time::SystemTime;
         use crate::{Number, PidControllerError};
+        use std::time::SystemTime;
 
         /// Compute the number of seconds that has elapsed between
         /// `last_update_time` and `measurement_time`. Returns a
@@ -509,26 +509,28 @@ pub mod std {
             last_update_time: SystemTime,
         ) -> Result<T, PidControllerError>
         where
-            T: Number
-            + fixed::traits::LosslessTryFrom<u64>
-            + fixed::traits::LosslessTryFrom<u32>,
+            T: Number + fixed::traits::LosslessTryFrom<u64> + fixed::traits::LosslessTryFrom<u32>,
         {
             let duration = measurement_time.duration_since(last_update_time)?;
 
-            Ok(T::lossless_try_from(duration.as_secs()).ok_or(PidControllerError::Numeric(
-                "duration's seconds part must be representable as T"
-            ))? + (T::lossless_try_from(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
-                "duration's nanoseconds part must be representable as T"
-            ))? / T::lossless_try_from(1_000_000_000_u32).ok_or(PidControllerError::Numeric(
-                "1_000_000_000 must be representable as T"
-            ))?))
+            Ok(
+                T::lossless_try_from(duration.as_secs()).ok_or(PidControllerError::Numeric(
+                    "duration's seconds part must be representable as T",
+                ))? + (T::lossless_try_from(duration.subsec_nanos()).ok_or(
+                    PidControllerError::Numeric(
+                        "duration's nanoseconds part must be representable as T",
+                    ),
+                )? / T::lossless_try_from(1_000_000_000_u32).ok_or(
+                    PidControllerError::Numeric("1_000_000_000 must be representable as T"),
+                )?),
+            )
         }
     }
 
     #[cfg(feature = "float")]
     pub mod real {
-        use std::time::SystemTime;
         use crate::{Number, PidControllerError};
+        use std::time::SystemTime;
 
         /// Compute the number of seconds that has elapsed between
         /// `last_update_time` and `measurement_time`. Returns a
@@ -544,13 +546,15 @@ pub mod std {
         {
             let duration = measurement_time.duration_since(last_update_time)?;
 
-            Ok(T::from_u64(duration.as_secs()).ok_or(PidControllerError::Numeric(
-                "duration's seconds part must be representable as T"
-            ))? + (T::from_u32(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
-                "duration's nanoseconds part must be representable as T"
-            ))? / T::from_u32(1_000_000_000_u32).ok_or(PidControllerError::Numeric(
-                "1_000_000_000 must be representable as T"
-            ))?))
+            Ok(
+                T::from_u64(duration.as_secs()).ok_or(PidControllerError::Numeric(
+                    "duration's seconds part must be representable as T",
+                ))? + (T::from_u32(duration.subsec_nanos()).ok_or(PidControllerError::Numeric(
+                    "duration's nanoseconds part must be representable as T",
+                ))? / T::from_u32(1_000_000_000_u32).ok_or(PidControllerError::Numeric(
+                    "1_000_000_000 must be representable as T",
+                ))?),
+            )
         }
     }
 }

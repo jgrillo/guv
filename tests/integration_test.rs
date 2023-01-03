@@ -20,11 +20,7 @@ use guv::std::real::calculate_h;
 #[cfg(feature = "fixed")]
 use guv::std::fixed::calculate_h;
 
-use guv::{
-    Number,
-    PidController,
-    PidControllerError
-};
+use guv::{Number, PidController, PidControllerError};
 
 //
 // proptest strategies
@@ -91,11 +87,9 @@ where
 
 fn negative_epsilon_inverse_epsilon_inverse_bounded_numbers<T>() -> impl Strategy<Value = T>
 where
-    T: Number + ArbInterop
+    T: Number + ArbInterop,
 {
-    arb::<T>().prop_map(|n| {
-        (T::one() / T::epsilon()) * n.cos()
-    })
+    arb::<T>().prop_map(|n| (T::one() / T::epsilon()) * n.cos())
 }
 
 /// This strategy generates `PidController<T>` structs whose configuration
