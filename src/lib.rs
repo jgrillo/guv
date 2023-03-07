@@ -14,6 +14,7 @@ use core::{
 /// \
 /// - `num_traits::real::Real + num_traits::FloatConst` if compiled with feature
 ///   `"float"`
+/// \
 /// - `fixed::traits::FixedSigned + cordic::CordicNumber` if compiled with
 ///   feature `"fixed"`
 /// \
@@ -163,9 +164,9 @@ pub enum PidControllerError {
 impl Display for PidControllerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            PidControllerError::Numeric(s) => f.write_fmt(format_args!("numeric error {0}", s)),
+            PidControllerError::Numeric(s) => f.write_fmt(format_args!("numeric error {s}")),
             PidControllerError::InvalidParameter(s) => {
-                f.write_fmt(format_args!("invalid parameter {0}", s))
+                f.write_fmt(format_args!("invalid parameter {s}"))
             }
         }
     }
@@ -183,7 +184,8 @@ where
 {
     let zero = T::zero();
     let eps = T::epsilon();
-    let max = T::one() / eps;
+    let two = T::one() + T::one();
+    let max = T::one() / (two * two * T::epsilon()); // FIXME: more rigor
 
     if proportional_gain < zero || proportional_gain > max {
         return Err(PidControllerError::InvalidParameter(
@@ -528,7 +530,7 @@ pub mod std {
     }
 
     #[cfg(feature = "float")]
-    pub mod real {
+    pub mod float {
         use crate::{Number, PidControllerError};
         use std::time::SystemTime;
 
