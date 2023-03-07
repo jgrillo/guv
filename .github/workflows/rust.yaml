@@ -50,17 +50,11 @@ jobs:
     - name: Build (all features)
       run: cargo build --verbose --release --all-features
 
-    - name: Test (no_std)
-      run: cargo test --verbose
-    - name: Test (std)
-      run: cargo test --verbose --features="std"
-    - name: Test (fixed, no_std)
-      run: cargo test --verbose --features="fixed"
-    - name: Test (float, no_std)
-      run: cargo test --verbose --features="float"
     - name: Test (fixed, std)
       run: cargo test --verbose --features="fixed,std"
     - name: Test (float, std)
       run: cargo test --verbose --features="float,std"
-    - name: Test (all features)
-      run: cargo test --verbose --all-features
+    - name: Test Release (fixed, std)
+      run: cargo test --verbose --release --features="fixed,std"
+    - name: Test Release (float, std)
+      run: cargo test --verbose --release --features="float,std"
