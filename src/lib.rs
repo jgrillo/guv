@@ -417,11 +417,11 @@ where
     /// \
     /// - `integral_time_constant` -- The time required for the integral term to
     ///   "catch up to" the proportional term in the face of an instantaneous
-    ///   jump in controller error. Must be in `(T::epsilon(), T::max_value()]`.
+    ///   jump in controller error. Must be in `[T::epsilon(), T::max_value()]`.
     /// \
     /// - `derivative_time_constant` -- The time required for the proportional
     ///   term to "catch up to" the derivative term if the error starts at zero
-    ///   and increases at a fixed rate. Must be in `(T::epsilon(), T::max_value()]`.
+    ///   and increases at a fixed rate. Must be in `[T::epsilon(), T::max_value()]`.
     /// \
     /// - `set_point_coefficient` -- This term determines how the controller
     ///   reacts to a change in the setpoint. Must be in
@@ -465,20 +465,19 @@ where
     /// \
     /// # Arguments:
     /// \
-    /// - `proportional_gain` -- The output the controller is multiplied by this
-    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
+    /// - `proportional_gain` -- The output of the controller is multiplied by
+    ///   this factor. Must be in `[T::zero(), T::max_value()]`.
     /// \
     /// - `integral_time_constant` -- The time required for the integral term to
     ///   "catch up to" the proportional term in the face of an instantaneous
-    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    ///   jump in controller error. Must be in `[T::epsilon(), T::max_value()]`.
     /// \
     /// - `derivative_time_constant` -- The time required for the proportional
     ///   term to "catch up to" the derivative term if the error starts at zero
-    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    ///   and increases at a fixed rate. Must be in `[T::epsilon(), T::max_value()]`.
     /// \
     /// - `set_point_coefficient` -- This term determines how the controller
-    ///   reacts to a change in the setpoint. Must be in
-    ///   `[T::zero(), 1 / T::epsilon()]`.
+    ///   reacts to a change in the setpoint. Must be in `[T::zero(), T::max_value()]`.
     pub fn update_constants(
         &self,
         proportional_gain: T,
@@ -511,19 +510,18 @@ where
     /// # Arguments:
     /// \
     /// - `proportional_gain` -- The output the controller is multiplied by this
-    ///   factor. Must be in `[T::zero(), 1 / T::epsilon()]`.
+    ///   factor. Must be in `[T::zero(), T::max_value()]`.
     /// \
     /// - `integral_time_constant` -- The time required for the integral term to
     ///   "catch up to" the proportional term in the face of an instantaneous
-    ///   jump in controller error. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    ///   jump in controller error. Must be in `(T::epsilon(), T::max_value()]`.
     /// \
     /// - `derivative_time_constant` -- The time required for the proportional
     ///   term to "catch up to" the derivative term if the error starts at zero
-    ///   and increases at a fixed rate. Must be in `(T::epsilon(), 1 / T::epsilon()]`.
+    ///   and increases at a fixed rate. Must be in `(T::epsilon(), T::max_value()]`.
     /// \
     /// - `set_point_coefficient` -- This term determines how the controller
-    ///   reacts to a change in the setpoint. Must be in
-    ///   `[T::zero(), 1 / T::epsilon()]`.
+    ///   reacts to a change in the setpoint. Must be in `[T::zero(), T::max_value()]`.
     pub fn update_constants_mut(
         &mut self,
         proportional_gain: T,

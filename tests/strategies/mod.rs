@@ -43,7 +43,7 @@ where
 }
 
 /// This strategy generates arbitrary floating point numbers on the interval
-/// `[T::min_value(), T::max_value()]` and ensures no `NaN` or `Inf` values are
+/// `[-T::max_value(), T::max_value()]` and ensures no `NaN` or `Inf` values are
 /// present.
 #[cfg(all(feature = "float", not(feature = "fixed")))]
 pub fn well_behaved_numbers<T>() -> impl Strategy<Value = T>
@@ -53,7 +53,8 @@ where
     arb::<T>().prop_map(make_behave)
 }
 
-/// This strategy generates arbitrary fixed point numbers.
+/// This strategy generates arbitrary fixed point numbers on the interval
+/// `[-T::max_value(), T::max_value()]`.
 #[cfg(all(feature = "fixed", not(feature = "float")))]
 pub fn well_behaved_numbers<T>() -> impl Strategy<Value = T>
 where
@@ -63,7 +64,7 @@ where
     arb::<T>().prop_map(move |n| n.clamp(-max, max))
 }
 
-/// Constrain the input `n` to the interval `(low, high]`
+/// Constrain the input `n` to the interval `[low, high]`
 #[cfg(all(feature = "float", not(feature = "fixed")))]
 fn bound<T>(low: T, high: T, n: T) -> T
 where
@@ -79,7 +80,7 @@ where
     )
 }
 
-/// Constrain the input `n` to the interval `(low, high]`
+/// Constrain the input `n` to the interval `[low, high]`
 #[cfg(all(feature = "fixed", not(feature = "float")))]
 fn bound<T>(low: T, high: T, n: T) -> T
 where
@@ -96,7 +97,7 @@ where
 }
 
 /// This strategy generates real numbers of type `T` on the interval
-/// `(low, high]`
+/// `[low, high]`
 #[cfg(all(feature = "float", not(feature = "fixed")))]
 pub fn bounded_numbers<T>(low: T, high: T) -> impl Strategy<Value = T>
 where
@@ -106,7 +107,7 @@ where
 }
 
 /// This strategy generates real numbers of type `T` on the interval
-/// `(low, high]`
+/// `[low, high]`
 #[cfg(all(feature = "fixed", not(feature = "float")))]
 pub fn bounded_numbers<T>(low: T, high: T) -> impl Strategy<Value = T>
 where
@@ -138,7 +139,7 @@ where
 }
 
 /// This strategy generates tuples of numbers `(low, high)` where high > low and
-/// low + high < T::MAX.
+/// low + high < T::max_value().
 #[cfg(all(feature = "fixed", not(feature = "float")))]
 fn ordered_pairs<T>() -> impl Strategy<Value = (T, T)>
 where
