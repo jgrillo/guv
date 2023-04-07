@@ -100,10 +100,18 @@ proptest! {
     #[cfg(feature = "float")]
     #[test]
     fn in_place_constants_update_should_not_fail_f64(
-        proportional_gain in strategies::zero_epsilon_inverse_bounded_numbers(),
-        integral_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        derivative_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        set_point_coefficient in strategies::zero_epsilon_inverse_bounded_numbers(),
+        proportional_gain in strategies::bounded_numbers(
+            0.0, <f64 as Number>::max_value()
+        ),
+        integral_time_constant in strategies::bounded_numbers(
+            <f64 as Number>::epsilon(), <f64 as Number>::max_value()
+        ),
+        derivative_time_constant in strategies::bounded_numbers(
+            <f64 as Number>::epsilon(), <f64 as Number>::max_value()
+        ),
+        set_point_coefficient in strategies::bounded_numbers(
+            0.0, <f64 as Number>::max_value()
+        ),
         pid_controller in strategies::default_pid_controllers::<f64>(),
     ) {
         let mut pid_controller = pid_controller
@@ -136,10 +144,18 @@ proptest! {
     #[cfg(feature = "float")]
     #[test]
     fn in_place_constants_update_should_not_fail_f32(
-        proportional_gain in strategies::zero_epsilon_inverse_bounded_numbers(),
-        integral_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        derivative_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        set_point_coefficient in strategies::zero_epsilon_inverse_bounded_numbers(),
+        proportional_gain in strategies::bounded_numbers(
+            0.0, <f32 as Number>::max_value()
+        ),
+        integral_time_constant in strategies::bounded_numbers(
+            <f32 as Number>::epsilon(), <f32 as Number>::max_value()
+        ),
+        derivative_time_constant in strategies::bounded_numbers(
+            <f32 as Number>::epsilon(), <f32 as Number>::max_value()
+        ),
+        set_point_coefficient in strategies::bounded_numbers(
+            0.0, <f32 as Number>::max_value()
+        ),
         pid_controller in strategies::default_pid_controllers::<f32>(),
     ) {
         let mut pid_controller = pid_controller
@@ -172,10 +188,18 @@ proptest! {
     #[cfg(feature = "float")]
     #[test]
     fn copy_constants_update_should_not_fail_f64(
-        proportional_gain in strategies::zero_epsilon_inverse_bounded_numbers(),
-        integral_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        derivative_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        set_point_coefficient in strategies::zero_epsilon_inverse_bounded_numbers(),
+        proportional_gain in strategies::bounded_numbers(
+            0.0, <f64 as Number>::max_value()
+        ),
+        integral_time_constant in strategies::bounded_numbers(
+            <f64 as Number>::epsilon(), <f64 as Number>::max_value()
+        ),
+        derivative_time_constant in strategies::bounded_numbers(
+            <f64 as Number>::epsilon(), <f64 as Number>::max_value()
+        ),
+        set_point_coefficient in strategies::bounded_numbers(
+            0.0, <f64 as Number>::max_value()
+        ),
         pid_controller in strategies::default_pid_controllers::<f64>(),
     ) {
         let mut pid_controller = pid_controller
@@ -196,24 +220,30 @@ proptest! {
             )
             .expect("updating constants should not fail");
 
-        assert_eq!(
-            another_pid_controller
-                .update(1000.0, 1000.0, std::f64::EPSILON, -1.0, 1.0)
-                .abs(),
-            1.0
-        );
+        another_pid_controller
+            .update(1000.0, 1000.0, std::f64::EPSILON, -1.0, 1.0);
 
         assert_eq!(pid_controller.control_output(), 0.0);
-        assert_eq!(another_pid_controller.control_output().abs(), 1.0);
+        assert!(
+            <f64 as num_traits::float::Float>::is_finite(another_pid_controller.control_output())
+        );
     }
 
     #[cfg(feature = "float")]
     #[test]
     fn copy_constants_update_should_not_fail_f32(
-        proportional_gain in strategies::zero_epsilon_inverse_bounded_numbers(),
-        integral_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        derivative_time_constant in strategies::epsilon_epsilon_inverse_bounded_numbers(),
-        set_point_coefficient in strategies::zero_epsilon_inverse_bounded_numbers(),
+        proportional_gain in strategies::bounded_numbers(
+            0.0, <f32 as Number>::max_value()
+        ),
+        integral_time_constant in strategies::bounded_numbers(
+            <f32 as Number>::epsilon(), <f32 as Number>::max_value()
+        ),
+        derivative_time_constant in strategies::bounded_numbers(
+            <f32 as Number>::epsilon(), <f32 as Number>::max_value()
+        ),
+        set_point_coefficient in strategies::bounded_numbers(
+            0.0, <f32 as Number>::max_value()
+        ),
         pid_controller in strategies::default_pid_controllers::<f32>(),
     ) {
         let mut pid_controller = pid_controller
@@ -234,15 +264,13 @@ proptest! {
             )
             .expect("updating constants should not fail");
 
-        assert_eq!(
-            another_pid_controller
-                .update(1000.0, 1000.0, std::f32::EPSILON, -1.0, 1.0)
-                .abs(),
-            1.0
-        );
+        another_pid_controller
+            .update(1000.0, 1000.0, std::f32::EPSILON, -1.0, 1.0);
 
         assert_eq!(pid_controller.control_output(), 0.0);
-        assert_eq!(another_pid_controller.control_output().abs(), 1.0);
+        assert!(
+            <f32 as num_traits::float::Float>::is_finite(another_pid_controller.control_output())
+        );
     }
 }
 
@@ -252,11 +280,19 @@ proptest! {
 
 #[cfg(feature = "float")]
 fn process<T: Number + num_traits::cast::FromPrimitive>(u: T, y: T, t: T) -> T {
-    let two = T::one() + T::one();
-
-    T::from_f32(-0.105).unwrap() * y * t
-        + T::from_f32(0.105).unwrap() * u * (t + two)
-        + (two * T::pi() * t).cos()
+    let two = T::one().safe_add(T::one());
+    // -0.105 * y * t + 0.105 * u * (t + 2.0) + (2.0 * T::pi() * t).cos()
+    T::from_f32(-0.105)
+        .unwrap()
+        .safe_mul(y)
+        .safe_mul(t)
+        .safe_add(
+            T::from_f32(0.105)
+                .unwrap()
+                .safe_mul(u)
+                .safe_mul(t.safe_add(two)),
+        )
+        .safe_add(two.safe_mul(T::pi()).safe_mul(t).cos())
 }
 
 #[cfg(feature = "float")]

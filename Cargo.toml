@@ -12,7 +12,7 @@ rust-version = "1.60"
 [features]
 default = []
 std = []
-fixed = ["dep:fixed", "dep:cordic"]
+fixed = ["dep:num-traits", "dep:fixed", "dep:cordic"]
 float = ["dep:num-traits"]
 
 [dependencies]
@@ -22,7 +22,7 @@ num-traits = { version = "0.2", features = ["libm"], optional = true }
 
 [dev-dependencies]
 arbitrary = "1"
-fixed = { version = "1", features = ["arbitrary"] }
+fixed = { version = "1", features = ["arbitrary", "num-traits"] }
 num-traits = { version = "0.2", features = ["libm"]}
 plotters = "0.3"
 proptest = "1"
